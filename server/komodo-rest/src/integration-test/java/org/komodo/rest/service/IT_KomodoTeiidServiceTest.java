@@ -25,28 +25,36 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import java.io.File;
+import java.io.InputStream;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileAttribute;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import javax.ws.rs.client.Client;
-import javax.ws.rs.client.ClientBuilder;
-import javax.ws.rs.client.Entity;
-import javax.ws.rs.client.Invocation;
+import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.UriBuilder;
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.junit.Arquillian;
+import org.jboss.resteasy.client.ClientRequest;
+import org.jboss.resteasy.client.ClientResponse;
 import org.jboss.resteasy.test.TestPortProvider;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -57,28 +65,41 @@ import org.komodo.repository.RepositoryImpl;
 import org.komodo.rest.KomodoRestV1Application.V1Constants;
 import org.komodo.rest.RestLink;
 import org.komodo.rest.relational.KomodoRestUriBuilder;
-import org.komodo.rest.relational.KomodoTeiidAttributes;
-import org.komodo.rest.relational.RestTeiid;
-import org.komodo.rest.relational.RestTeiidStatus;
-import org.komodo.rest.relational.RestTeiidVdbStatus;
-import org.komodo.rest.relational.RestTeiidVdbStatusVdb;
-import org.komodo.rest.relational.RestVdb;
-import org.komodo.rest.relational.RestVdbTranslator;
+import org.komodo.rest.relational.RelationalMessages;
 import org.komodo.rest.relational.datasource.RestDataSource;
 import org.komodo.rest.relational.json.KomodoJsonMarshaller;
+import org.komodo.rest.relational.request.KomodoFileAttributes;
+import org.komodo.rest.relational.request.KomodoPathAttribute;
+import org.komodo.rest.relational.request.KomodoQueryAttribute;
+import org.komodo.rest.relational.request.KomodoTeiidAttributes;
+import org.komodo.rest.relational.response.KomodoStatusObject;
+import org.komodo.rest.relational.response.KomodoStorageAttributes;
+import org.komodo.rest.relational.response.RestQueryResult;
+import org.komodo.rest.relational.response.RestQueryRow;
+import org.komodo.rest.relational.response.RestTeiid;
+import org.komodo.rest.relational.response.RestTeiidStatus;
+import org.komodo.rest.relational.response.RestTeiidVdbStatus;
+import org.komodo.rest.relational.response.RestTeiidVdbStatusVdb;
+import org.komodo.rest.relational.response.RestVdb;
+import org.komodo.rest.relational.response.RestVdbTranslator;
 import org.komodo.spi.constants.StringConstants;
 import org.komodo.spi.constants.SystemConstants;
 import org.komodo.spi.query.TeiidService;
+import org.komodo.spi.repository.DocumentType;
 import org.komodo.spi.repository.KomodoType;
+import org.komodo.spi.runtime.DataSourceDriver;
 import org.komodo.spi.runtime.EventManager;
+import org.komodo.spi.runtime.ExecutionAdmin.ConnectivityType;
 import org.komodo.spi.runtime.HostProvider;
 import org.komodo.spi.runtime.TeiidAdminInfo;
 import org.komodo.spi.runtime.TeiidInstance;
 import org.komodo.spi.runtime.TeiidJdbcInfo;
 import org.komodo.spi.runtime.TeiidParent;
+import org.komodo.spi.runtime.TeiidVdb;
 import org.komodo.spi.runtime.version.TeiidVersionProvider;
 import org.komodo.test.utils.DummyEventManager;
 import org.komodo.test.utils.TestUtilities;
+import org.komodo.utils.FileUtils;
 
 @RunWith(Arquillian.class)
 @SuppressWarnings( {"javadoc", "nls"} )
@@ -90,13 +111,11 @@ public final class IT_KomodoTeiidServiceTest implements StringConstants {
 
     private static final String CACHED_TEIID_DATA_PATH = RepositoryImpl.TEIID_CACHE_ROOT + FORWARD_SLASH + ServerManager.DEFAULT_SERVER_NAME;
 
+    private static final String MYSQL_DRIVER = "mysql-connector";
+
     private static Path _kengineDataDir;
 
     private static KomodoRestUriBuilder _uriBuilder;
-
-    private Client client;
-
-    private Response response;
 
     private TeiidService service;
 
@@ -123,8 +142,47 @@ public final class IT_KomodoTeiidServiceTest implements StringConstants {
         _uriBuilder = new KomodoRestUriBuilder(BASE_URI);
     }
 
-    private Invocation.Builder request(final URI uri) {
-        return this.client.target(uri.toString()).request();
+
+    @AfterClass
+    public static void afterAll() throws Exception {
+        if (_kengineDataDir != null) {
+            FileUtils.removeDirectoryAndChildren(_kengineDataDir.toFile());
+        }
+    }
+
+    private ClientRequest request(final URI uri, MediaType type) {
+      ClientRequest request = new ClientRequest(uri.toString());
+      if (type != null)
+          request.accept(type);
+
+        return request;
+    }
+
+
+    private void assertNoMysqlDriver() throws Exception {
+        wait(2);
+
+        Collection<DataSourceDriver> drivers = helperInstance.getDataSourceDrivers();
+        for (DataSourceDriver driver : drivers) {
+            assertFalse(driver.getName().startsWith(MYSQL_DRIVER));
+        }
+    }
+
+    private void assertMysqlDriver() throws Exception {
+        boolean found = false;
+        for (int i = 0; i < 10 && !found; i++) {
+            wait(3);
+            Collection<DataSourceDriver> drivers = helperInstance.getDataSourceDrivers();
+            for (DataSourceDriver driver : drivers) {
+                // Use startswith rather than equals since the
+                // mysql connector gives up 2 drivers rather than just 1
+                if (driver.getName().startsWith(MYSQL_DRIVER)) {
+                    found = true;
+                    break;
+                }
+            }
+        }
+        assertTrue("Cannot find deployed driver", found);
     }
 
     private TeiidInstance getTeiidInstance() throws Exception {
@@ -147,10 +205,49 @@ public final class IT_KomodoTeiidServiceTest implements StringConstants {
         return service.getTeiidInstance(parent, jdbcInfo);
     }
 
+    private void setJdbcName(String jdbcUser) throws Exception {
+        URI uri = UriBuilder.fromUri(_uriBuilder.baseUri())
+                                            .path(V1Constants.TEIID_SEGMENT)
+                                            .path(V1Constants.TEIID_CREDENTIALS)
+                                            .build();
+
+        KomodoTeiidAttributes teiidAttrs = new KomodoTeiidAttributes();
+        teiidAttrs.setJdbcUser(jdbcUser);
+
+        ClientRequest request = request(uri, MediaType.APPLICATION_JSON_TYPE);
+        request.body(MediaType.APPLICATION_JSON_TYPE, teiidAttrs);
+
+        ClientResponse<String> response = request.post(String.class);
+        assertEquals(200, response.getStatus());
+    }
+
+    private void waitForVdb(String vdbName) throws Exception {
+        TeiidVdb vdb = null;
+        //
+        // Timeout after 30 seconds
+        //
+        for (int i = 0; vdb == null && i < 10; ++i) {
+            vdb = helperInstance.getVdb(vdbName);
+            if (vdb != null && vdb.isActive())
+                break; // Found it and its active
+
+            if (i >= 10)
+                fail("Timed out waiting for vdb " + vdbName + " to become active");
+
+            wait(3);
+        }
+    }
+
+    private void wait(int seconds) {
+        try {
+            Thread.sleep(seconds * 1000);
+        } catch (Exception ex) {
+            // Nothing required
+        }
+    }
+
     @Before
     public void beforeEach() throws Exception {
-        this.client = ClientBuilder.newClient();
-
         this.service = PluginService.getInstance().getDefaultTeiidService();
 
         helperInstance = getTeiidInstance();
@@ -158,13 +255,48 @@ public final class IT_KomodoTeiidServiceTest implements StringConstants {
 
         // Deploy sample vdb for service to find
         helperInstance.deployDynamicVdb(TestUtilities.SAMPLE_VDB_FILE, TestUtilities.sampleExample());
-        Thread.sleep(2000);
+        waitForVdb(TestUtilities.SAMPLE_VDB_NAME);
     }
 
     @After
     public void afterEach() throws Exception {
+        setJdbcName(TeiidJdbcInfo.DEFAULT_JDBC_USERNAME);
+
+        //
+        // Refresh the artifacts of this client instance
+        //
+        helperInstance.reconnect();
+
         helperInstance.undeployDynamicVdb(TestUtilities.SAMPLE_VDB_FILE);
-        Thread.sleep(2000);
+
+        Set<String> undeployDrivers = new HashSet<String>();
+        Collection<DataSourceDriver> drivers = helperInstance.getDataSourceDrivers();
+        for (DataSourceDriver driver : drivers) {
+            if (driver.getName().startsWith(MYSQL_DRIVER)) {
+                String driverName = driver.getName();
+                //
+                // MySQL has 2 drivers so concatenates the class name
+                // to the end of the driver names but means that the driver
+                // cannot be undeployed unless the class name is removed
+                //
+                int endsWithClass = driverName.lastIndexOf(driver.getClassName());
+                if (endsWithClass > -1)
+                    driverName = driverName.substring(0, endsWithClass);
+
+                undeployDrivers.add(driverName);
+            }
+        }
+
+        for (String driver : undeployDrivers) {
+            try {
+                helperInstance.undeployDriver(driver);
+            } catch (Exception ex) {
+                // Flag as a warning that something in the test is going awry
+                ex.printStackTrace();
+            }
+        }
+
+        wait(2);
 
         if (helperInstance != null)
             helperInstance.disconnect();
@@ -186,10 +318,13 @@ public final class IT_KomodoTeiidServiceTest implements StringConstants {
         teiidAttrs.setJdbcUser(TeiidJdbcInfo.DEFAULT_JDBC_USERNAME);
         teiidAttrs.setJdbcPasswd(TeiidJdbcInfo.DEFAULT_JDBC_PASSWORD);
 
-        this.response = request(uri).post(Entity.json(teiidAttrs));
-        final String entity = this.response.readEntity(String.class);
+        ClientRequest request = request(uri, MediaType.APPLICATION_JSON_TYPE);
+        request.body(MediaType.APPLICATION_JSON_TYPE, teiidAttrs);
+
+        ClientResponse<String> response = request.post(String.class);
+        String entity = response.getEntity();
         System.out.println("Response:\n" + entity);
-        assertEquals(200, this.response.getStatus());
+        assertEquals(200, response.getStatus());
 
         RestTeiid rt = KomodoJsonMarshaller.unmarshall(entity, RestTeiid.class);
         assertNotNull(TeiidInstance.DEFAULT_HOST, rt.getId());
@@ -202,11 +337,11 @@ public final class IT_KomodoTeiidServiceTest implements StringConstants {
         assertEquals(TeiidVersionProvider.getInstance().getTeiidVersion().toString(), rt.getVersion());
 
         assertEquals(TeiidAdminInfo.DEFAULT_ADMIN_USERNAME, rt.getAdminUser());
-        assertEquals(TeiidAdminInfo.DEFAULT_ADMIN_PASSWORD, rt.getAdminPassword());
+        assertEquals(TeiidAdminInfo.DEFAULT_ADMIN_PASSWORD, rt.getAdminPasswd());
         assertEquals(TeiidAdminInfo.DEFAULT_PORT, rt.getAdminPort());
 
         assertEquals(TeiidJdbcInfo.DEFAULT_JDBC_USERNAME, rt.getJdbcUser());
-        assertEquals(TeiidJdbcInfo.DEFAULT_JDBC_PASSWORD, rt.getJdbcPassword());
+        assertEquals(TeiidJdbcInfo.DEFAULT_JDBC_PASSWORD, rt.getJdbcPasswd());
         assertEquals(TeiidJdbcInfo.DEFAULT_PORT, rt.getJdbcPort());
     }
 
@@ -217,11 +352,12 @@ public final class IT_KomodoTeiidServiceTest implements StringConstants {
                                           .path(V1Constants.STATUS_SEGMENT)
                                           .build();
 
-        this.response = request(uri).get();
-        final String entity = this.response.readEntity(String.class);
+        ClientRequest request = request(uri, MediaType.APPLICATION_JSON_TYPE);
+        ClientResponse<String> response = request.get(String.class);
+        final String entity = response.getEntity();
 
         System.out.println("Response:\n" + entity);
-        assertEquals(200, this.response.getStatus());
+        assertEquals(200, response.getStatus());
 
         RestTeiidStatus status = KomodoJsonMarshaller.unmarshall(entity, RestTeiidStatus.class);
         assertNotNull(status);
@@ -245,11 +381,12 @@ public final class IT_KomodoTeiidServiceTest implements StringConstants {
                                           .path(V1Constants.VDBS_SEGMENT)
                                           .build();
 
-        this.response = request(uri).get();
-        final String entity = this.response.readEntity(String.class);
+        ClientRequest request = request(uri, MediaType.APPLICATION_JSON_TYPE);
+        ClientResponse<String> response = request.get(String.class);
+        final String entity = response.getEntity();
 
         System.out.println("Response:\n" + entity);
-        assertEquals(200, this.response.getStatus());
+        assertEquals(200, response.getStatus());
 
         RestTeiidVdbStatus status = KomodoJsonMarshaller.unmarshall(entity, RestTeiidVdbStatus.class);
         assertNotNull(status);
@@ -277,10 +414,11 @@ public final class IT_KomodoTeiidServiceTest implements StringConstants {
                                           .path(V1Constants.VDBS_SEGMENT)
                                           .build();
 
-        this.response = request(uri).get();
-        final String entity = this.response.readEntity(String.class);;
+        ClientRequest request = request(uri, MediaType.APPLICATION_JSON_TYPE);
+        ClientResponse<String> response = request.get(String.class);
+        final String entity = response.getEntity();
         System.out.println("Response:\n" + entity);
-        assertEquals(200, this.response.getStatus());
+        assertEquals(200, response.getStatus());
 
         RestVdb[] vdbs = KomodoJsonMarshaller.unmarshallArray(entity, RestVdb[].class);
         assertTrue(vdbs.length == 1);
@@ -323,11 +461,12 @@ public final class IT_KomodoTeiidServiceTest implements StringConstants {
                                           .path(TestUtilities.SAMPLE_VDB_NAME)
                                           .build();
 
-        this.response = request(uri).get();
+        ClientRequest request = request(uri, MediaType.APPLICATION_JSON_TYPE);
+        ClientResponse<String> response = request.get(String.class);
+        final String entity = response.getEntity();
 
-        final String entity = this.response.readEntity(String.class);
         System.out.println("Response:\n" + entity);
-        assertEquals(200, this.response.getStatus());
+        assertEquals(200, response.getStatus());
 
         RestVdb vdb = KomodoJsonMarshaller.unmarshall(entity, RestVdb.class);
         assertNotNull(vdb);
@@ -369,33 +508,48 @@ public final class IT_KomodoTeiidServiceTest implements StringConstants {
 
         int iterations = 3;
         final CountDownLatch latch = new CountDownLatch(iterations);
+        final List<Throwable> assertionFailures = new ArrayList<Throwable>();
 
         for (int i = 0; i < iterations; ++i) {
             Runnable runnable = new Runnable() {
 
                 @Override
                 public void run() {
-                    Client client = ClientBuilder.newClient();
-                    Response response = client.target(uri.toString()).request().get();
-                    Thread.yield();
+                    try {
+                        ClientRequest request = request(uri, MediaType.APPLICATION_JSON_TYPE);
+                        ClientResponse<String> response = request.get(String.class);
 
-                    String entity = response.readEntity(String.class);
-                    System.out.println("Response:\n" + entity);
-                    assertEquals(200, response.getStatus());
-                    RestTeiidStatus status = KomodoJsonMarshaller.unmarshall(entity, RestTeiidStatus.class);
-                    assertNotNull(status);
+                        Thread.yield();
 
-                    assertEquals("DefaultServer", status.getId());
-                    assertEquals("localhost", status.getHost());
-                    assertEquals("8.12.4", status.getVersion());
-                    assertTrue(status.isTeiidInstanceAvailable());
-                    assertTrue(status.isConnected());
-                    assertEquals(1, status.getDataSourceSize());
-                    assertEquals(3, status.getDataSourceDriverSize());
-                    assertEquals(54, status.getTranslatorSize());
-                    assertEquals(1, status.getVdbSize());
+                        String entity = response.getEntity();
+                        System.out.println("Response:\n" + entity);
+                        //
+                        // Don't want the thread dying since the latch will never
+                        // countdown and the test will be stuck for 3 minutes
+                        // waiting to timeout.
+                        // Better to add the assertion errors into a bucket and once
+                        // the countdown has been completed, check the bucket for
+                        // errors. Don't really care if there is more than one, just that
+                        // there is one, the test should fail
+                        //
+                        assertEquals(200, response.getStatus());
+                        RestTeiidStatus status = KomodoJsonMarshaller.unmarshall(entity, RestTeiidStatus.class);
+                        assertNotNull(status);
 
-                    latch.countDown();
+                        assertEquals("DefaultServer", status.getId());
+                        assertEquals("localhost", status.getHost());
+                        assertEquals("8.12.4", status.getVersion());
+                        assertTrue(status.isTeiidInstanceAvailable());
+                        assertTrue(status.isConnected());
+                        assertEquals(1, status.getDataSourceSize());
+                        assertEquals(3, status.getDataSourceDriverSize());
+                        assertEquals(54, status.getTranslatorSize());
+                        assertEquals(1, status.getVdbSize());
+                    } catch (Throwable ex) {
+                        assertionFailures.add(ex);
+                    } finally {
+                        latch.countDown();
+                    }
                 }
             };
 
@@ -404,6 +558,11 @@ public final class IT_KomodoTeiidServiceTest implements StringConstants {
         }
 
         assertTrue(latch.await(3, TimeUnit.MINUTES));
+        for (Throwable t : assertionFailures) {
+            // Give a clue as to what failed
+            t.printStackTrace();
+        }
+        assertTrue(assertionFailures.isEmpty());
     }
 
     @Test
@@ -413,10 +572,12 @@ public final class IT_KomodoTeiidServiceTest implements StringConstants {
                                           .path(V1Constants.TRANSLATORS_SEGMENT)
                                           .build();
 
-        this.response = request(uri).get();
-        final String entity = this.response.readEntity(String.class);;
+        ClientRequest request = request(uri, MediaType.APPLICATION_JSON_TYPE);
+        ClientResponse<String> response = request.get(String.class);
+        final String entity = response.getEntity();
+
         System.out.println("Response:\n" + entity);
-        assertEquals(200, this.response.getStatus());
+        assertEquals(200, response.getStatus());
 
         RestVdbTranslator[] translators = KomodoJsonMarshaller.unmarshallArray(entity, RestVdbTranslator[].class);
         assertTrue(translators.length > 0);
@@ -434,10 +595,12 @@ public final class IT_KomodoTeiidServiceTest implements StringConstants {
                                           .path(V1Constants.DATA_SOURCES_SEGMENT)
                                           .build();
 
-        this.response = request(uri).get();
-        final String entity = this.response.readEntity(String.class);;
+        ClientRequest request = request(uri, MediaType.APPLICATION_JSON_TYPE);
+        ClientResponse<String> response = request.get(String.class);
+        final String entity = response.getEntity();
+
         System.out.println("Response:\n" + entity);
-        assertEquals(200, this.response.getStatus());
+        assertEquals(200, response.getStatus());
 
         RestDataSource[] dataSources = KomodoJsonMarshaller.unmarshallArray(entity, RestDataSource[].class);
         assertTrue(dataSources.length > 0);
@@ -445,6 +608,336 @@ public final class IT_KomodoTeiidServiceTest implements StringConstants {
         for (RestDataSource dataSource : dataSources) {
             assertNotNull(dataSource.getId());
             assertEquals(3, dataSource.getLinks().size());
+        }
+    }
+
+    @Test
+    public void shouldDeployDriver() throws Exception {
+        assertNoMysqlDriver();
+
+        URI uri = UriBuilder.fromUri(_uriBuilder.baseUri())
+                                            .path(V1Constants.TEIID_SEGMENT)
+                                            .path(V1Constants.TEIID_DRIVER)
+                                            .build();
+
+        KomodoFileAttributes fileAttr = new KomodoFileAttributes();
+        fileAttr.setName(MYSQL_DRIVER);
+
+        InputStream driverStream = TestUtilities.mySqlDriver();
+        assertNotNull(driverStream);
+
+        byte[] driverBytes = TestUtilities.streamToBytes(driverStream);
+        String content = Base64.getEncoder().encodeToString(driverBytes);
+        fileAttr.setContent(content);
+
+        ClientRequest request = request(uri, MediaType.APPLICATION_JSON_TYPE);
+        request.body(MediaType.APPLICATION_JSON_TYPE, fileAttr);
+        ClientResponse<String> response = request.post(String.class);
+        final String entity = response.getEntity();
+
+        assertEquals(Response.Status.OK.getStatusCode(), response.getStatus());
+
+        KomodoStatusObject status = KomodoJsonMarshaller.unmarshall(entity, KomodoStatusObject.class);
+        assertNotNull(status);
+
+        String title = RelationalMessages.getString(RelationalMessages.Info.DRIVER_DEPLOYMENT_STATUS_TITLE);
+        assertEquals(title, status.getTitle());
+        Map<String, String> attributes = status.getAttributes();
+
+        assertEquals(1, attributes.size());
+
+        String deployMsg = RelationalMessages.getString(RelationalMessages.Info.DRIVER_SUCCESSFULLY_DEPLOYED);
+        assertEquals(deployMsg, attributes.values().iterator().next());
+
+        assertMysqlDriver();
+    }
+
+    @Test
+    public void shouldUndeployDriver() throws Exception {
+        InputStream driverStream = TestUtilities.mySqlDriver();
+        assertNotNull(driverStream);
+        byte[] driverBytes = TestUtilities.streamToBytes(driverStream);
+        File driverFile = File.createTempFile(MYSQL_DRIVER, DOT + JAR);
+        FileUtils.write(driverBytes, driverFile);
+
+        helperInstance.deployDriver(MYSQL_DRIVER, driverFile);
+        assertMysqlDriver();
+
+        URI uri = UriBuilder.fromUri(_uriBuilder.baseUri())
+                                            .path(V1Constants.TEIID_SEGMENT)
+                                            .path(V1Constants.TEIID_DRIVER)
+                                            .path(MYSQL_DRIVER)
+                                            .build();
+
+        ClientRequest request = request(uri, MediaType.APPLICATION_JSON_TYPE);
+        ClientResponse<String> response = request.delete(String.class);
+        final String entity = response.getEntity();
+
+        assertEquals(Response.Status.OK.getStatusCode(), response.getStatus());
+
+        KomodoStatusObject status = KomodoJsonMarshaller.unmarshall(entity, KomodoStatusObject.class);
+        assertNotNull(status);
+
+        wait(2);
+
+        helperInstance.reconnect();
+
+        String title = RelationalMessages.getString(RelationalMessages.Info.DRIVER_DEPLOYMENT_STATUS_TITLE);
+        assertEquals(title, status.getTitle());
+        Map<String, String> attributes = status.getAttributes();
+
+        assertEquals(1, attributes.size());
+
+        String deployMsg = RelationalMessages.getString(RelationalMessages.Info.DRIVER_SUCCESSFULLY_UNDEPLOYED);
+        assertEquals(deployMsg, attributes.values().iterator().next());
+
+        assertNoMysqlDriver();
+    }
+
+    private void importDataService() throws Exception {
+        //
+        // Import the data service into the workspace
+        //
+        URI uri = UriBuilder.fromUri(_uriBuilder.baseUri())
+                                          .path(V1Constants.IMPORT_EXPORT_SEGMENT)
+                                          .path(V1Constants.IMPORT)
+                                          .build();
+
+        KomodoStorageAttributes storageAttr = new KomodoStorageAttributes();
+        storageAttr.setStorageType("file");
+        storageAttr.setDocumentType(DocumentType.ZIP);
+
+        InputStream usStatesDSStream = TestUtilities.usStatesDataserviceExample();
+        byte[] sampleBytes = TestUtilities.streamToBytes(usStatesDSStream);
+        String content = Base64.getEncoder().encodeToString(sampleBytes);
+        storageAttr.setContent(content);
+
+        ClientRequest request = request(uri, MediaType.APPLICATION_JSON_TYPE);
+        request.body(MediaType.APPLICATION_JSON_TYPE, storageAttr);
+        ClientResponse<String> response = request.post(String.class);
+
+        assertEquals(Response.Status.OK.getStatusCode(), response.getStatus());
+    }
+
+    private void deployDataService() throws Exception {
+        KomodoPathAttribute pathAttr = new KomodoPathAttribute();
+        String path = RepositoryImpl.WORKSPACE_ROOT + FORWARD_SLASH + "UsStatesService";
+        pathAttr.setPath(path);
+
+        //
+        // Deploy the data service
+        //
+        URI uri = UriBuilder.fromUri(_uriBuilder.baseUri())
+                                    .path(V1Constants.TEIID_SEGMENT)
+                                    .path(V1Constants.DATA_SERVICE_SEGMENT)
+                                    .build();
+
+        ClientRequest request = request(uri, MediaType.APPLICATION_JSON_TYPE);
+        request.body(MediaType.APPLICATION_JSON_TYPE, pathAttr);
+        ClientResponse<String> response = request.post(String.class);
+        final String entity = response.getEntity();
+
+        assertEquals(Response.Status.OK.getStatusCode(), response.getStatus());
+
+        KomodoStatusObject status = KomodoJsonMarshaller.unmarshall(entity, KomodoStatusObject.class);
+        assertNotNull(status);
+
+        Map<String, String> attributes = status.getAttributes();
+        for (Map.Entry<String, String> attribute : attributes.entrySet()) {
+            assertFalse("Error occurred in deployment: " + attribute.getValue(),
+                        attribute.getKey().startsWith("ErrorMessage"));
+        }
+    }
+
+    @Test
+    public void shouldDeployDataService() throws Exception {
+        try {
+            importDataService();
+
+            deployDataService();
+
+        } finally {
+            try {
+                helperInstance.undeployDynamicVdb(TestUtilities.US_STATES_VDB_NAME);
+                helperInstance.deleteDataSource(TestUtilities.US_STATES_DATA_SOURCE_NAME);
+            } catch (Exception ex) {
+                // Nothing to do
+            }
+        }
+    }
+
+    private void queryDataService(KomodoQueryAttribute queryAttr, int expRowCount, int firstCellValue) throws Exception {
+        URI uri;
+        String entity;
+        //
+        // Query the deployed vdb
+        //
+        uri = UriBuilder.fromUri(_uriBuilder.baseUri())
+                                    .path(V1Constants.TEIID_SEGMENT)
+                                    .path(V1Constants.QUERY_SEGMENT)
+                                    .build();
+
+        ClientRequest request = request(uri, MediaType.APPLICATION_JSON_TYPE);
+        request.body(MediaType.APPLICATION_JSON_TYPE, queryAttr);
+        ClientResponse<String> response = request.post(String.class);
+        entity = response.getEntity();
+
+        System.out.println("Entity: " + entity);
+        assertEquals(Response.Status.OK.getStatusCode(), response.getStatus());
+
+        RestQueryResult result = KomodoJsonMarshaller.unmarshall(entity, RestQueryResult.class);
+        assertNotNull(result);
+        assertEquals(expRowCount, result.getRows().length);
+
+        RestQueryRow firstRow = result.getRows()[0];
+        String value = firstRow.getValues()[0];
+        assertEquals(new Integer(firstCellValue).toString(), value);
+    }
+
+    @Test
+    public void shouldQueryTeiid() throws Exception {
+        try {
+            importDataService();
+
+            deployDataService();
+
+            //
+            // Give the vdb time to become active
+            //
+            waitForVdb("usstates");
+
+            KomodoQueryAttribute queryAttr = new KomodoQueryAttribute();
+            queryAttr.setQuery("SELECT * FROM state");
+            queryAttr.setTarget("usstates");
+
+            queryDataService(queryAttr, 59, 1);
+
+        } finally {
+            try {
+                helperInstance.undeployDynamicVdb(TestUtilities.US_STATES_VDB_NAME);
+                helperInstance.deleteDataSource(TestUtilities.US_STATES_DATA_SOURCE_NAME);
+            } catch (Exception ex) {
+                // Nothing to do
+            }
+        }
+    }
+
+    @Test
+    public void shouldQueryTeiidWithLimitAndOffset() throws Exception {
+        try {
+            importDataService();
+
+            deployDataService();
+
+            //
+            // Give the vdb time to become active
+            //
+            waitForVdb("usstates");
+
+            KomodoQueryAttribute queryAttr = new KomodoQueryAttribute();
+            queryAttr.setQuery("SELECT * FROM state");
+            queryAttr.setTarget("usstates");
+
+            int offset = 5;
+            int limit = 10;
+            queryAttr.setLimit(limit);
+            queryAttr.setOffset(offset);
+
+            queryDataService(queryAttr, limit, offset);
+
+        } finally {
+            try {
+                helperInstance.undeployDynamicVdb(TestUtilities.US_STATES_VDB_NAME);
+                helperInstance.deleteDataSource(TestUtilities.US_STATES_DATA_SOURCE_NAME);
+            } catch (Exception ex) {
+                // Nothing to do
+            }
+        }
+    }
+
+    @Test
+    public void shouldQueryTeiidUsingDataservice() throws Exception {
+        try {
+            importDataService();
+
+            deployDataService();
+
+            //
+            // Give the vdb time to become active
+            //
+            waitForVdb("usstates");
+
+            String dsPath = RepositoryImpl.WORKSPACE_ROOT + FORWARD_SLASH + "UsStatesService";
+
+            KomodoQueryAttribute queryAttr = new KomodoQueryAttribute();
+            queryAttr.setQuery("SELECT * FROM state");
+            queryAttr.setTarget(dsPath);
+
+            queryDataService(queryAttr, 59, 1);
+
+        } finally {
+            try {
+                helperInstance.undeployDynamicVdb(TestUtilities.US_STATES_VDB_NAME);
+                helperInstance.deleteDataSource(TestUtilities.US_STATES_DATA_SOURCE_NAME);
+            } catch (Exception ex) {
+                // Nothing to do
+            }
+        }
+    }
+
+    private ClientResponse<String> ping(ConnectivityType cType) throws Exception {
+        URI uri = UriBuilder.fromUri(_uriBuilder.baseUri())
+                                            .path(V1Constants.TEIID_SEGMENT)
+                                            .path(V1Constants.PING_SEGMENT)
+                                            .queryParam(V1Constants.PING_TYPE_PARAMETER, cType.toString().toLowerCase())
+                                            .build();
+
+        ClientRequest request = request(uri, MediaType.APPLICATION_JSON_TYPE);
+        ClientResponse<String> response = request.get(String.class);
+        assertEquals(200, response.getStatus());
+        return response;
+    }
+
+    private void shouldPing(ConnectivityType cType) throws Exception {
+
+        ClientResponse<String> response = ping(cType);
+        String entity = response.getEntity();
+
+        KomodoStatusObject status = KomodoJsonMarshaller.unmarshall(entity, KomodoStatusObject.class);
+        assertNotNull(status);
+
+        Map<String, String> attributes = status.getAttributes();
+        assertEquals("true", attributes.get("OK"));
+        assertEquals("OK", attributes.get("Message"));
+    }
+
+    @Test
+    public void shouldAdminPing() throws Exception {
+        shouldPing(ConnectivityType.ADMIN);
+    }
+
+    @Test
+    public void shouldJdbcPing() throws Exception {
+        shouldPing(ConnectivityType.JDBC);
+    }
+
+    @Test
+    public void shouldFailJdbcPing() throws Exception {
+        setJdbcName("IamTheWrongJdbcUserName");
+
+        try {
+            ClientResponse<String> response = ping(ConnectivityType.JDBC);
+            String entity = response.getEntity();
+            System.out.println("Entity: " + entity);
+            KomodoStatusObject status = KomodoJsonMarshaller.unmarshall(entity, KomodoStatusObject.class);
+            assertNotNull(status);
+
+            Map<String, String> attributes = status.getAttributes();
+            assertEquals("false", attributes.get("OK"));
+            assertTrue(attributes.get("Message").contains("Unable to establish a jdbc connection to teiid instance"));
+            assertTrue(attributes.get("Exception").contains("The username \"IamTheWrongJdbcUserName\" and/or password and/or payload token could not be authenticated by security domain teiid-security"));
+        } finally {
+            setJdbcName(TeiidJdbcInfo.DEFAULT_JDBC_USERNAME);
         }
     }
 }

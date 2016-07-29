@@ -23,19 +23,41 @@ package org.komodo.spi.repository;
 
 import org.komodo.spi.constants.StringConstants;
 
-public enum DocumentType {
+public class DocumentType implements StringConstants {
 
-    XML(StringConstants.XML),
+    /**
+     * VDB-XML
+     */
+    public static final DocumentType VDB_XML = new DocumentType(StringConstants.VDB_DEPLOYMENT_SUFFIX);
 
-    ZIP(StringConstants.ZIP),
+    /**
+     * TDS
+     */
+    public static final DocumentType TDS = new DocumentType(StringConstants.DS_SUFFIX);
 
-    DDL(StringConstants.DDL),
+    /**
+     * ZIP
+     */
+    public static final DocumentType ZIP = new DocumentType(StringConstants.ZIP);
 
-    UNKNOWN(StringConstants.EMPTY_STRING);
+    /**
+     * DDL
+     */
+    public static final DocumentType DDL = new DocumentType(StringConstants.DDL);
+
+    /**
+     * JAR
+     */
+    public static final DocumentType JAR = new DocumentType(StringConstants.JAR);
+
+    /**
+     * UNKNOWN
+     */
+    public static final DocumentType UNKNOWN = new DocumentType(StringConstants.EMPTY_STRING);
 
     private String type;
 
-    DocumentType(String type) {
+    public DocumentType(String type) {
         this.type = type;
     }
 
@@ -44,12 +66,64 @@ public enum DocumentType {
         return this.type;
     }
 
-    public static DocumentType documentType(String docTypeValue) {
-        for (DocumentType docType : values()) {
-            if (docType.toString().equalsIgnoreCase(docTypeValue))
-                return docType;
-        }
+    /**
+     * @param name
+     * @return a file name from the given name and the document type
+     */
+    public String fileName(String name) {
+        if (name.endsWith(DOT + type))
+            return name; // nothing to do
 
-        return UNKNOWN;
+        if (type.contains(DOT))
+            return name + type; // eg. myVdb -vdb.xml
+
+        return name + DOT + type;
+    }
+
+    public static DocumentType createDocumentType(String name) {
+        if (name == null)
+            return DocumentType.UNKNOWN;
+
+        if (name.endsWith(VDB_DEPLOYMENT_SUFFIX))
+            return DocumentType.VDB_XML;
+
+        if (name.endsWith(DS_SUFFIX))
+            return DocumentType.TDS;
+
+        int dotIndex = name.lastIndexOf(DOT);
+        if (dotIndex == -1)
+            return DocumentType.UNKNOWN;
+
+        String suffix = name.substring(dotIndex + 1);
+        return new DocumentType(suffix);
+    }
+
+    public static DocumentType documentType(String docTypeValue) {
+        return new DocumentType(docTypeValue);
+    }
+
+    @Override
+    public int hashCode() {
+        final int prime = 31;
+        int result = 1;
+        result = prime * result + ((type == null) ? 0 : type.hashCode());
+        return result;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj)
+            return true;
+        if (obj == null)
+            return false;
+        if (getClass() != obj.getClass())
+            return false;
+        DocumentType other = (DocumentType)obj;
+        if (type == null) {
+            if (other.type != null)
+                return false;
+        } else if (!type.equals(other.type))
+            return false;
+        return true;
     }
 }

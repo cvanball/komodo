@@ -24,7 +24,6 @@ package org.komodo.rest.service;
 import java.io.File;
 import java.io.FileInputStream;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
@@ -33,7 +32,7 @@ import javax.ws.rs.GET;
 import javax.ws.rs.POST;
 import javax.ws.rs.Path;
 import javax.ws.rs.Produces;
-import javax.ws.rs.ServerErrorException;
+import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.MediaType;
@@ -46,11 +45,12 @@ import org.komodo.osgi.PluginService;
 import org.komodo.rest.KomodoRestException;
 import org.komodo.rest.KomodoRestV1Application.V1Constants;
 import org.komodo.rest.KomodoService;
-import org.komodo.rest.relational.ImportExportStatus;
-import org.komodo.rest.relational.KomodoStorageAttributes;
 import org.komodo.rest.relational.RelationalMessages;
-import org.komodo.rest.relational.RestStorageType;
 import org.komodo.rest.relational.json.KomodoJsonMarshaller;
+import org.komodo.rest.relational.response.ImportExportStatus;
+import org.komodo.rest.relational.response.KomodoStorageAttributes;
+import org.komodo.rest.relational.response.RestStorageType;
+import org.komodo.spi.repository.DocumentType;
 import org.komodo.spi.repository.Exportable;
 import org.komodo.spi.repository.KomodoObject;
 import org.komodo.spi.repository.Repository.UnitOfWork;
@@ -73,22 +73,8 @@ import io.swagger.annotations.ApiResponses;
 @Api( tags = {V1Constants.IMPORT_EXPORT_SEGMENT} )
 public class KomodoImportExportService extends KomodoService {
 
-    public KomodoImportExportService(KEngine engine) throws ServerErrorException {
+    public KomodoImportExportService(KEngine engine) throws WebApplicationException {
         super(engine);
-    }
-
-    private String encrypt(byte[] content) {
-        if (content == null)
-            return null;
-
-        return Base64.getEncoder().encodeToString(content);
-    }
-
-    private byte[] decrypt(String content) {
-        if (content == null)
-            return null;
-
-        return Base64.getDecoder().decode(content);
     }
 
     private Response checkStorageAttributes(KomodoStorageAttributes sta,
@@ -190,7 +176,7 @@ public class KomodoImportExportService extends KomodoService {
             }
 
             status.setName(artifact.getName(uow));
-            status.setType(artifact.getDocumentType().toString());
+            status.setType(artifact.getDocumentType(uow).toString());
             String downloadable = wsMgr.exportArtifact(uow, artifact, sta.getStorageType(), parameters);
 
             //
@@ -325,7 +311,7 @@ public class KomodoImportExportService extends KomodoService {
             KomodoObject workspace = repo.komodoWorkspace(uow);
             StorageReference storageRef = new StorageReference(sta.getStorageType(),
                                                                                    parameters,
-                                                                                   sta.getDocumentType());
+                                                                                   new DocumentType(sta.getDocumentType()));
 
             ImportMessages messages = wsMgr.importArtifact(uow, workspace, storageRef);
             if (messages.hasError())
@@ -368,7 +354,6 @@ public class KomodoImportExportService extends KomodoService {
     @GET
     @Path(V1Constants.STORAGE_TYPES)
     @Produces( MediaType.APPLICATION_JSON )
-    @Consumes ( { MediaType.APPLICATION_JSON } )
     @ApiOperation(value = "Returns the collection of available storage types used for import/export",
                              response = RestStorageType[].class)
     @ApiResponses(value = {

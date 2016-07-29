@@ -24,7 +24,7 @@ package org.komodo.rest.relational.json;
 import static org.komodo.rest.Messages.Error.UNEXPECTED_JSON_TOKEN;
 import java.io.IOException;
 import org.komodo.rest.Messages;
-import org.komodo.rest.relational.KomodoTeiidAttributes;
+import org.komodo.rest.relational.request.KomodoTeiidAttributes;
 import com.google.gson.TypeAdapter;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
@@ -54,11 +54,17 @@ public final class TeiidAttributesSerializer extends TypeAdapter< KomodoTeiidAtt
                 case KomodoTeiidAttributes.ADMIN_PASSWD_LABEL:
                     teiidAttrs.setAdminPasswd(in.nextString());
                     break;
+                case KomodoTeiidAttributes.ADMIN_SECURE_LABEL:
+                    teiidAttrs.setAdminSecure(in.nextBoolean());
+                    break;
                 case KomodoTeiidAttributes.JDBC_USER_LABEL:
                     teiidAttrs.setJdbcUser(in.nextString());
                     break;
                 case KomodoTeiidAttributes.JDBC_PASSWD_LABEL:
                     teiidAttrs.setJdbcPasswd(in.nextString());
+                    break;
+                case KomodoTeiidAttributes.JDBC_SECURE_LABEL:
+                    teiidAttrs.setJdbcSecure(in.nextBoolean());
                     break;
                 default:
                     throw new IOException( Messages.getString( UNEXPECTED_JSON_TOKEN, name ) );
@@ -87,11 +93,23 @@ public final class TeiidAttributesSerializer extends TypeAdapter< KomodoTeiidAtt
         out.name(KomodoTeiidAttributes.ADMIN_PASSWD_LABEL);
         out.value(value.getAdminPasswd());
 
+        Boolean adminSecure = value.isAdminSecure();
+        if (adminSecure != null) {
+            out.name(KomodoTeiidAttributes.ADMIN_SECURE_LABEL);
+            out.value(adminSecure);
+        }
+
         out.name(KomodoTeiidAttributes.JDBC_USER_LABEL);
         out.value(value.getJdbcUser());
 
         out.name(KomodoTeiidAttributes.JDBC_PASSWD_LABEL);
         out.value(value.getJdbcPasswd());
+
+        Boolean jdbcSecure = value.isJdbcSecure();
+        if (jdbcSecure != null) {
+            out.name(KomodoTeiidAttributes.JDBC_SECURE_LABEL);
+            out.value(jdbcSecure);
+        }
 
         out.endObject();
     }

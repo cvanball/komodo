@@ -135,6 +135,8 @@
   - tko:driverName (string)
   - tko:className (string)
 
+[tko:driver] > nt:file, tko:workspaceItem, tko:libraryComponent
+
 /*
  * The Komodo library identifies the Teiid artifacts intended to be reused by multiple VDBs, workspaces, or Komodo repositories.
  */
@@ -191,8 +193,12 @@
 /*
  * A data service known by the workspace.
  */
-[tko:dataService] > tko:vdb
+[tko:dataService] > nt:unstructured, mode:hashed, tko:libraryComponent
+  - vdb:description (string)
+  - tko:serviceVdb (string)
   + * (tko:vdb) copy
+  + * (tko:dataSource) copy
+  + * (tko:driver) copy
  
 /*
  * The VDB imports grouping node used by the library. Child nodes represent Import VDB definitions.

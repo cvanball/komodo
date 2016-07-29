@@ -24,6 +24,7 @@ package org.komodo.teiid;
 import javax.jcr.Node;
 import org.komodo.plugin.framework.teiid.AbstractTeiidService;
 import org.komodo.plugin.framework.teiid.Messages;
+import org.komodo.spi.query.QueryService;
 import org.komodo.spi.runtime.TeiidInstance;
 import org.komodo.spi.runtime.TeiidJdbcInfo;
 import org.komodo.spi.runtime.TeiidParent;
@@ -69,6 +70,11 @@ public class TeiidServiceImpl extends AbstractTeiidService {
     @Override
     public TeiidInstance getTeiidInstance(TeiidParent teiidParent, TeiidJdbcInfo jdbcInfo) throws Exception {
         return new TeiidInstanceImpl(teiidParent, getVersion(), jdbcInfo);
+    }
+
+    @Override
+    public QueryService getQueryService(String host, int port, String user, String passwd, boolean secure) throws Exception {
+        return new QueryServiceImpl(getDataTypeManager(), host, port, user, passwd, secure);
     }
 
     @Override

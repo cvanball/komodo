@@ -32,7 +32,6 @@ import static org.komodo.rest.relational.RelationalMessages.Error.DATASERVICE_SE
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
-import javax.ws.rs.Consumes;
 import javax.ws.rs.DELETE;
 import javax.ws.rs.GET;
 import javax.ws.rs.POST;
@@ -40,7 +39,7 @@ import javax.ws.rs.PUT;
 import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
-import javax.ws.rs.ServerErrorException;
+import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.MediaType;
@@ -56,10 +55,10 @@ import org.komodo.rest.KomodoRestException;
 import org.komodo.rest.KomodoRestV1Application.V1Constants;
 import org.komodo.rest.KomodoService;
 import org.komodo.rest.relational.KomodoProperties;
-import org.komodo.rest.relational.KomodoStatusObject;
 import org.komodo.rest.relational.RelationalMessages;
 import org.komodo.rest.relational.dataservice.RestDataservice;
 import org.komodo.rest.relational.json.KomodoJsonMarshaller;
+import org.komodo.rest.relational.response.KomodoStatusObject;
 import org.komodo.spi.KException;
 import org.komodo.spi.constants.StringConstants;
 import org.komodo.spi.repository.KomodoObject;
@@ -85,10 +84,10 @@ public final class KomodoDataserviceService extends KomodoService {
     /**
      * @param engine
      *        the Komodo Engine (cannot be <code>null</code> and must be started)
-     * @throws ServerErrorException
+     * @throws WebApplicationException
      *         if there is a problem obtaining the {@link WorkspaceManager workspace manager}
      */
-    public KomodoDataserviceService( final KEngine engine ) throws ServerErrorException {
+    public KomodoDataserviceService( final KEngine engine ) throws WebApplicationException {
         super( engine );
     }
 
@@ -104,7 +103,6 @@ public final class KomodoDataserviceService extends KomodoService {
      */
     @GET
     @Produces( MediaType.APPLICATION_JSON )
-    @Consumes ( { MediaType.APPLICATION_JSON } )
     @ApiOperation(value = "Display the collection of data services",
                             response = RestDataservice[].class)
     @ApiResponses(value = {
@@ -229,7 +227,6 @@ public final class KomodoDataserviceService extends KomodoService {
     @GET
     @Path( V1Constants.DATA_SERVICE_PLACEHOLDER )
     @Produces( { MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML } )
-    @Consumes ( { MediaType.APPLICATION_JSON } )
     @ApiOperation(value = "Find dataservice by name", response = RestDataservice.class)
     @ApiResponses(value = {
         @ApiResponse(code = 404, message = "No Dataservice could be found with name"),
@@ -286,7 +283,6 @@ public final class KomodoDataserviceService extends KomodoService {
     @POST
     @Path( StringConstants.FORWARD_SLASH + V1Constants.DATA_SERVICE_PLACEHOLDER )
     @Produces( MediaType.APPLICATION_JSON )
-    @Consumes ( { MediaType.APPLICATION_JSON } )
     @ApiOperation(value = "Create a dataservice in the workspace")
     @ApiResponses(value = {
         @ApiResponse(code = 406, message = "Only JSON is returned by this operation"),
@@ -374,7 +370,6 @@ public final class KomodoDataserviceService extends KomodoService {
     @POST
     @Path( StringConstants.FORWARD_SLASH + V1Constants.CLONE_DATA_SERVICE_SEGMENT + StringConstants.FORWARD_SLASH + V1Constants.DATA_SERVICE_PLACEHOLDER )
     @Produces( MediaType.APPLICATION_JSON )
-    @Consumes ( { MediaType.APPLICATION_JSON } )
     @ApiOperation(value = "Clone a dataservice in the workspace")
     @ApiResponses(value = {
         @ApiResponse(code = 406, message = "Only JSON is returned by this operation"),
@@ -437,8 +432,6 @@ public final class KomodoDataserviceService extends KomodoService {
 
             setProperties( uow, dataservice, oldEntity );
 
-            // TODO copy the properties
-
             final RestDataservice entity = entityFactory.create(dataservice, uriInfo.getBaseUri(), uow );
             final Response response = commit( uow, mediaTypes, entity );
             return response;
@@ -472,7 +465,6 @@ public final class KomodoDataserviceService extends KomodoService {
     @PUT
     @Path( StringConstants.FORWARD_SLASH + V1Constants.DATA_SERVICE_PLACEHOLDER )
     @Produces( MediaType.APPLICATION_JSON )
-    @Consumes ( { MediaType.APPLICATION_JSON } )
     @ApiOperation(value = "Update a dataservice in the workspace")
     @ApiResponses(value = {
         @ApiResponse(code = 406, message = "Only JSON is returned by this operation"),
@@ -583,39 +575,16 @@ public final class KomodoDataserviceService extends KomodoService {
     
     // Sets Dataservice properties using the supplied RestDataservice object
     private void setProperties(final UnitOfWork uow, Dataservice dataService, RestDataservice restDataService) throws KException {
-        //TODO: Complete to include all properties
-        
         // 'New' = requested RestDataservice properties
         String newDescription = restDataService.getDescription();
-        String newConnType = restDataService.getConnectionType();
-        String newFilePath = restDataService.getOriginalFilePath();
-        int newVersion = restDataService.getVersion();
         
         // 'Old' = current Dataservice properties
         String oldDescription = dataService.getDescription(uow);
-        String oldConnType = dataService.getConnectionType(uow);
-        String oldFilePath = dataService.getOriginalFilePath(uow);
-        int oldVersion = dataService.getVersion(uow);
         
         // Description
         if ( !StringUtils.equals(newDescription, oldDescription) ) {
             dataService.setDescription( uow, newDescription );
         } 
-        
-        // ConnectionType
-        if( !StringUtils.isBlank(newConnType) && !StringUtils.equals(newConnType, oldConnType) ) {
-            dataService.setConnectionType(uow, newConnType);
-        }
-        
-        // OriginalFilePath
-        if( !StringUtils.equals(newFilePath,oldFilePath) ) {
-            dataService.setOriginalFilePath(uow, newFilePath);
-        }
-        
-        // Version
-        if( newVersion != oldVersion ) {
-            dataService.setVersion(uow, newVersion);
-        }
     }
 
     /**

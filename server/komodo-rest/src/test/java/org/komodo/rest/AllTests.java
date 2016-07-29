@@ -32,12 +32,15 @@ import org.komodo.rest.relational.RestVdbImportTest;
 import org.komodo.rest.relational.RestVdbPermissionTest;
 import org.komodo.rest.relational.RestVdbTest;
 import org.komodo.rest.relational.RestVdbTranslatorTest;
+import org.komodo.rest.relational.json.DataserviceSerializerTest;
+import org.komodo.rest.relational.json.QueryResultSerializerTest;
 import org.komodo.rest.relational.json.VdbDataRoleSerializerTest;
 import org.komodo.rest.relational.json.VdbImportSerializerTest;
 import org.komodo.rest.relational.json.VdbPermissionSerializerTest;
 import org.komodo.rest.relational.json.VdbSerializerTest;
 import org.komodo.rest.relational.json.VdbTranslatorSerializerTest;
 import org.komodo.rest.service.KomodoDataserviceServiceTest;
+import org.komodo.rest.service.KomodoImportExportServiceTest;
 import org.komodo.rest.service.KomodoSearchServiceTest;
 import org.komodo.rest.service.KomodoUtilServiceTest;
 import org.komodo.rest.service.KomodoVdbServiceTest;
@@ -55,7 +58,9 @@ import org.komodo.rest.service.KomodoVdbServiceTest;
         RestVdbPermissionTest.class,
         RestVdbTest.class,
         RestVdbTranslatorTest.class,
+        QueryResultSerializerTest.class,
 
+        DataserviceSerializerTest.class,
         VdbDataRoleSerializerTest.class,
         VdbImportSerializerTest.class,
         VdbPermissionSerializerTest.class,
@@ -63,6 +68,7 @@ import org.komodo.rest.service.KomodoVdbServiceTest;
         VdbTranslatorSerializerTest.class,
 
         KomodoDataserviceServiceTest.class,
+        KomodoImportExportServiceTest.class,
         KomodoSearchServiceTest.class,
         KomodoUtilServiceTest.class,
         KomodoVdbServiceTest.class

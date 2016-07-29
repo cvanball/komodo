@@ -75,7 +75,7 @@ public interface Datasource extends Exportable, RelationalObject {
     KomodoType IDENTIFIER = KomodoType.DATASOURCE;
 
     /**
-     * An empty array of teiids.
+     * An empty array of data sources.
      */
     Datasource[] NO_DATASOURCES = new Datasource[0];
 
@@ -163,10 +163,42 @@ public interface Datasource extends Exportable, RelationalObject {
     /**
      * @param uow
      *        the transaction (cannot be <code>null</code> or have a state that is not {@link State#NOT_STARTED})
-     * @return id of this teiid model
+     * @return id of this datasource
      * @throws KException
      */
     String getId(UnitOfWork uow) throws KException;
+
+    /**
+     * @param transaction
+     *        the transaction (cannot be <code>null</code> or have a state that is not {@link State#NOT_STARTED})
+     * @return description of this datasource (may be <code>null</code>)
+     * @throws KException if error occurs
+     */
+    String getDescription(UnitOfWork transaction) throws KException;
+
+    /**
+     * @param transaction
+     *        the transaction (cannot be <code>null</code> or have a state that is not {@link State#NOT_STARTED})
+     * @param description description of this datasource
+     * @throws KException if error occurs
+     */
+    void setDescription(UnitOfWork transaction, String description) throws KException;
+
+    /**
+     * @param transaction
+     *        the transaction (cannot be <code>null</code> or have a state that is not {@link State#NOT_STARTED})
+     * @return external location of this datasource (may be <code>null</code>)
+     * @throws KException if error occurs
+     */
+    String getExternalLocation(UnitOfWork transaction) throws KException;
+
+    /**
+     * @param transaction
+     *        the transaction (cannot be <code>null</code> or have a state that is not {@link State#NOT_STARTED})
+     * @param extLoc external location of this datasource
+     * @throws KException if error occurs
+     */
+    void setExternalLocation(UnitOfWork transaction, String extLoc) throws KException;
 
     /**
      * @param transaction

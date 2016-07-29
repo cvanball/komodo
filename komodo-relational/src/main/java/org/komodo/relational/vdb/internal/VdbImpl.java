@@ -68,7 +68,7 @@ public class VdbImpl extends RelationalObjectImpl implements Vdb {
     /**
      * The allowed child types.
      */
-    protected static final KomodoType[] CHILD_TYPES = new KomodoType[] { DataRole.IDENTIFIER, Entry.IDENTIFIER, Model.IDENTIFIER,
+    private static final KomodoType[] CHILD_TYPES = new KomodoType[] { DataRole.IDENTIFIER, Entry.IDENTIFIER, Model.IDENTIFIER,
                                                                          Translator.IDENTIFIER, VdbImport.IDENTIFIER };
 
 	/**
@@ -221,8 +221,8 @@ public class VdbImpl extends RelationalObjectImpl implements Vdb {
         }
 
         @Override
-        public DocumentType getDocumentType() throws KException {
-            return DocumentType.XML;
+        public DocumentType getDocumentType(UnitOfWork transaction) throws KException {
+            return DocumentType.VDB_XML;
         }
     }
 
@@ -1234,7 +1234,7 @@ public class VdbImpl extends RelationalObjectImpl implements Vdb {
     }
 
     @Override
-    public DocumentType getDocumentType() throws KException {
-        return DocumentType.XML;
+    public DocumentType getDocumentType(UnitOfWork transaction) throws KException {
+        return DocumentType.VDB_XML;
     }
 }

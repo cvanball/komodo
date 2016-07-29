@@ -59,6 +59,21 @@ public class Messages implements StringConstants {
         CONSTRAINT_NOT_FOUND_TO_REMOVE,
 
         /**
+         * An error message indicating the datasource className property was undefined.
+         */
+        DATASOURCE_CLASSNAME_NOT_DEFINED,
+
+        /**
+         * An error message indicating the datasource driverName property was undefined.
+         */
+        DATASOURCE_DRIVERNAME_NOT_DEFINED,
+
+        /**
+         * An error message indicating the datasource jndiName property was undefined.
+         */
+        DATASOURCE_JNDINAME_NOT_DEFINED,
+
+        /**
          * An error message indicating a VDB data role could not be removed because it was not found.
          */
         DATA_ROLE_NOT_FOUND_TO_REMOVE,
@@ -291,6 +306,44 @@ public class Messages implements StringConstants {
             return getEnumName(this) + DOT + name();
         }
 
+    }
+
+    public enum DataserviceConveyor {
+
+        /**
+         * An error message indicating the driver cannot be found in the data service
+         */
+        DATA_SERVICE_DRIVER_NOT_FOUND,
+
+        /**
+         * An error message indicating the driver failed to deploy
+         */
+        DATA_SERVICE_DRIVER_FAILED_TO_DEPLOY,
+
+        /**
+         * An error message indicating the data source cannot be found in the data service
+         */
+        DATA_SERVICE_DATA_SOURCE_NOT_FOUND,
+
+        /**
+         * An error message indicating the data source failed to deploy
+         */
+        DATA_SERVICE_DATA_SOURCE_FAILED_TO_DEPLOY,
+
+        /**
+         * An error message indicating the vdb cannot be found in the data service
+         */
+        DATA_SERVICE_VDB_NOT_FOUND,
+
+        /**
+         * An error message indicating the vdb contents cannot be exported from the data service
+         */
+        DATA_SERVICE_VDB_CONTENTS_FAILURE;
+
+        @Override
+        public String toString() {
+            return getEnumName(this) + DOT + name();
+        }
     }
 
     /**

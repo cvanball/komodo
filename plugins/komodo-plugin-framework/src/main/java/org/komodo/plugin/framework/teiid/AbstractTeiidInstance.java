@@ -21,6 +21,7 @@
  */
 package org.komodo.plugin.framework.teiid;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -29,6 +30,7 @@ import java.io.InputStreamReader;
 import java.io.Reader;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.sql.Connection;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -52,6 +54,22 @@ import org.komodo.utils.ArgCheck;
 import org.komodo.utils.KLog;
 
 public abstract class AbstractTeiidInstance implements TeiidInstance, StringConstants {
+
+    protected class JndiManager implements StringConstants {
+
+        private static final String PREFIX = JAVA + COLON + FORWARD_SLASH;
+
+        public String getName(String name) {
+            if (! name.startsWith(PREFIX))
+                return name;
+
+            name = name.replace(PREFIX, EMPTY_STRING);
+            if (name.startsWith(FORWARD_SLASH))
+                name = name.substring(1);
+
+            return name;
+        }
+    }
 
     protected class TeiidAdminInfoImpl implements TeiidAdminInfo {
 
@@ -131,6 +149,8 @@ public abstract class AbstractTeiidInstance implements TeiidInstance, StringCons
                                            "<metadata type=\"DDL\"><![CDATA[CREATE FOREIGN TABLE G1 (e1 string, e2 integer);]]> </metadata>" //$NON-NLS-1$
                                            + "</model>" + "</vdb>";
 
+    private final JndiManager manager = new JndiManager();
+
     private TeiidParent parent;
 
     private TeiidAdminInfo adminInfo;
@@ -150,6 +170,8 @@ public abstract class AbstractTeiidInstance implements TeiidInstance, StringCons
         this.adminInfo = new TeiidAdminInfoImpl();
         this.jdbcInfo = jdbcInfo;
     }
+
+    protected abstract AbstractConnectionManager getConnectionManager();
 
     @Override
     public boolean isSound() {
@@ -249,7 +271,7 @@ public abstract class AbstractTeiidInstance implements TeiidInstance, StringCons
 
     @Override
     public String getUrl() {
-        return getTeiidAdminInfo().getUrl();
+        return getTeiidJdbcInfo().getUrl();
     }
 
     @Override
@@ -347,7 +369,43 @@ public abstract class AbstractTeiidInstance implements TeiidInstance, StringCons
 
     protected abstract Outcome pingAdmin() throws Exception;
 
-    protected abstract Outcome pingJdbc();
+    protected Outcome pingJdbc() {
+        TeiidJdbcInfo teiidJdbcInfo = getTeiidJdbcInfo();
+        Connection teiidJdbcConnection = null;
+
+        try {
+
+            deploy(PING_VDB, new ByteArrayInputStream(TEST_VDB.getBytes()));
+
+            Thread.sleep(2000);
+
+            try {
+                teiidJdbcConnection = getConnectionManager().getConnection(
+                                                                      PING_VDB_NAME,
+                                                                      getHost(),
+                                                                      teiidJdbcInfo.getPort(),
+                                                                      teiidJdbcInfo.getUsername(),
+                                                                      teiidJdbcInfo.getPassword(),
+                                                                      teiidJdbcInfo.isSecure());
+
+                //pass
+                return OutcomeFactory.getInstance().createOK();
+
+            } catch (Throwable ex) {
+                String msg = Messages.getString(Messages.ExecutionAdmin.instanceDeployUndeployProblemPingingTeiidJdbc, getUrl());
+                return OutcomeFactory.getInstance().createError(msg, new Exception(ex));
+            } finally {
+                if (teiidJdbcConnection != null) {
+                    teiidJdbcConnection.close();
+                }
+
+                undeploy(PING_VDB);
+            }
+        } catch (Exception ex) {
+            String msg = Messages.getString(Messages.ExecutionAdmin.instanceDeployUndeployProblemPingingTeiidJdbc, getUrl());
+            return OutcomeFactory.getInstance().createError(msg, ex);
+        }
+    }
 
     protected abstract boolean isCoherent();
 
@@ -370,6 +428,7 @@ public abstract class AbstractTeiidInstance implements TeiidInstance, StringCons
             switch (connectivityType) {
                 case JDBC:
                     outcome = pingJdbc();
+                    break;
                 case ADMIN:
                 default:
                     outcome = pingAdmin();
@@ -446,6 +505,11 @@ public abstract class AbstractTeiidInstance implements TeiidInstance, StringCons
         }
 
         connect();
+
+        //
+        // Check for jndi name prefix and drop it
+        //
+        dsName = manager.getName(dsName);
 
         // Check if exists, return false
         if (dataSourceExists(dsName)) {
@@ -623,6 +687,27 @@ public abstract class AbstractTeiidInstance implements TeiidInstance, StringCons
 
         try {
             deploy(driverName, iStream);
+
+            // Give a 0.5 sec pause for the driver to finish loading.
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException e) {
+                // ignore
+            }
+
+        } catch (Exception ex) {
+            // Jar deployment failed
+            throw ex;
+        }
+    }
+
+    @Override
+    public void undeployDriver(String driverName) throws Exception {
+        connect();
+        ArgCheck.isNotNull(driverName, "driverName"); //$NON-NLS-1$
+
+        try {
+            undeploy(driverName);
         } catch (Exception ex) {
             // Jar deployment failed
             throw ex;

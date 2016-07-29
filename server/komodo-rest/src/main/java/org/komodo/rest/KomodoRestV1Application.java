@@ -21,11 +21,9 @@
  */
 package org.komodo.rest;
 
-import static org.komodo.rest.Messages.Error.KOMODO_ENGINE_CLEAR_ERROR;
 import static org.komodo.rest.Messages.Error.KOMODO_ENGINE_CLEAR_TIMEOUT;
 import static org.komodo.rest.Messages.Error.KOMODO_ENGINE_SHUTDOWN_ERROR;
 import static org.komodo.rest.Messages.Error.KOMODO_ENGINE_SHUTDOWN_TIMEOUT;
-import static org.komodo.rest.Messages.Error.KOMODO_ENGINE_STARTUP_ERROR;
 import static org.komodo.rest.Messages.Error.KOMODO_ENGINE_STARTUP_TIMEOUT;
 import java.io.File;
 import java.io.InputStream;
@@ -37,11 +35,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import javax.annotation.PreDestroy;
 import javax.ws.rs.ApplicationPath;
-import javax.ws.rs.ServerErrorException;
+import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.Application;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
-import org.jboss.resteasy.plugins.interceptors.CorsFilter;
 import org.komodo.core.KEngine;
 import org.komodo.importer.ImportMessages;
 import org.komodo.importer.ImportOptions;
@@ -53,6 +50,8 @@ import org.komodo.relational.vdb.Vdb;
 import org.komodo.relational.workspace.WorkspaceManager;
 import org.komodo.repository.SynchronousCallback;
 import org.komodo.rest.KomodoRestV1Application.V1Constants;
+import org.komodo.rest.cors.CorsInterceptor;
+import org.komodo.rest.cors.OptionsExceptionMapper;
 import org.komodo.rest.json.JsonConstants;
 import org.komodo.rest.service.KomodoDataserviceService;
 import org.komodo.rest.service.KomodoImportExportService;
@@ -78,7 +77,6 @@ import org.komodo.spi.repository.Repository.UnitOfWork;
 import org.komodo.spi.repository.RepositoryClientEvent;
 import org.komodo.spi.repository.RepositoryObserver;
 import org.komodo.utils.KLog;
-import org.komodo.utils.StringUtils;
 import io.swagger.converter.ModelConverters;
 import io.swagger.jaxrs.config.BeanConfig;
 
@@ -168,6 +166,11 @@ public class KomodoRestV1Application extends Application implements RepositoryOb
          * The name of the URI path segment for the collection of DataServices in the Komodo workspace.
          */
         String DATA_SERVICES_SEGMENT = "dataservices"; //$NON-NLS-1$
+
+        /**
+         * The name of the URI path segment for a DataService in the Komodo workspace.
+         */
+        String DATA_SERVICE_SEGMENT = "dataservice"; //$NON-NLS-1$
 
         /**
          * The name of the URI path segment for DataService clone in the Komodo workspace.
@@ -325,6 +328,16 @@ public class KomodoRestV1Application extends Application implements RepositoryOb
         String TEIID_CREDENTIALS = "credentials"; //$NON-NLS-1$
 
         /**
+         * The driver property for adding a driver to the teiid server
+         */
+        String TEIID_DRIVER = "driver";
+
+        /**
+         * Placeholder added to an URI to allow a specific teiid driver id
+         */
+        String TEIID_DRIVER_PLACEHOLDER = "{driverName}";
+
+        /**
          * The teiid status path segment
          */
         String STATUS_SEGMENT = "status"; //$NON-NLS-1$
@@ -358,6 +371,21 @@ public class KomodoRestV1Application extends Application implements RepositoryOb
          * The available storage types of the import export service
          */
         String STORAGE_TYPES = "availableStorageTypes";
+
+        /**
+         * The teiid segment for running a query against the teiid server
+         */
+        String QUERY_SEGMENT = "query";
+
+        /**
+         * The teiid segment for running a ping against the teiid server
+         */
+        String PING_SEGMENT = "ping";
+
+        /**
+         * The name of the URI ping type parameter
+         */
+        String PING_TYPE_PARAMETER = "pingType";
     }
 
     private static final int TIMEOUT = 1;
@@ -370,10 +398,10 @@ public class KomodoRestV1Application extends Application implements RepositoryOb
     /**
      * Constructs a Komodo REST application.
      *
-     * @throws ServerErrorException
+     * @throws WebApplicationException
      *         if the Komodo engine cannot be started
      */
-    public KomodoRestV1Application() throws ServerErrorException {
+    public KomodoRestV1Application() throws WebApplicationException {
         try {
             // Set the log path to something relative to the deployment location of this application
             // Try to use the base directory in jboss. If not in jboss this would probably be empty so
@@ -391,7 +419,7 @@ public class KomodoRestV1Application extends Application implements RepositoryOb
             // Ensure server logging level is reduced to something sane!
             KLog.getLogger().setLevel(Level.INFO);
         } catch (Exception ex) {
-            throw new ServerErrorException(Response.Status.INTERNAL_SERVER_ERROR.getStatusCode(), ex);
+            throw new WebApplicationException(ex, Response.Status.INTERNAL_SERVER_ERROR.getStatusCode());
         }
 
         this.latch = new CountDownLatch( 1 );
@@ -406,7 +434,9 @@ public class KomodoRestV1Application extends Application implements RepositoryOb
         objs.add( new KomodoTeiidService( this.kengine ));
         objs.add( new KomodoImportExportService( this.kengine ));
 
-        CorsFilter corsFilter = initCorsFilter();
+        objs.add(new OptionsExceptionMapper());
+
+        CorsInterceptor corsFilter = initCorsFilter();
         objs.add(corsFilter);
 
         this.singletons = Collections.unmodifiableSet( objs );
@@ -414,15 +444,13 @@ public class KomodoRestV1Application extends Application implements RepositoryOb
         initSwaggerConfiguration();
     }
 
-    private CorsFilter initCorsFilter() {
-        CorsFilter corsFilter = new CorsFilter();
-        corsFilter.getAllowedOrigins().add("*"); //$NON-NLS-1$
-        String allowHeaders = "Content-Type, X-Requested-With, accept, Origin," + //$NON-NLS-1$
-                                                "Access-Control-Request-Method," + //$NON-NLS-1$
-                                                "Access-Control-Request-Headers, Authorization"; //$NON-NLS-1$
-        corsFilter.setAllowedHeaders(allowHeaders);
+    private CorsInterceptor initCorsFilter() {
+        CorsInterceptor corsFilter = new CorsInterceptor();
+
+        corsFilter.getAllowedOrigins().add(STAR);
+        corsFilter.setAllowedHeaders(CorsInterceptor.ALLOW_HEADERS);
         corsFilter.setAllowCredentials(true);
-        corsFilter.setAllowedMethods("GET, POST, PUT, DELETE, OPTIONS, HEAD"); //$NON-NLS-1$
+        corsFilter.setAllowedMethods(CorsInterceptor.ALLOW_METHODS);
         corsFilter.setCorsMaxAge(1209600);
         return corsFilter;
     }
@@ -473,10 +501,10 @@ public class KomodoRestV1Application extends Application implements RepositoryOb
     /**
      * Clears the Komodo default repository.
      *
-     * @throws ServerErrorException
+     * @throws WebApplicationException
      *         if an error occurs clearing the repository
      */
-    public void clearRepository() throws ServerErrorException {
+    public void clearRepository() throws WebApplicationException {
         this.latch = new CountDownLatch( 1 );
 
         final RepositoryClientEvent event = RepositoryClientEvent.createClearEvent( this.kengine );
@@ -488,11 +516,11 @@ public class KomodoRestV1Application extends Application implements RepositoryOb
         try {
             cleared = this.latch.await( TIMEOUT, UNIT );
         } catch ( final Exception e ) {
-            throw new ServerErrorException( Messages.getString( KOMODO_ENGINE_CLEAR_ERROR ), Status.INTERNAL_SERVER_ERROR );
+            throw new WebApplicationException( e, Status.INTERNAL_SERVER_ERROR );
         }
 
         if ( !cleared ) {
-            throw new ServerErrorException( Messages.getString( KOMODO_ENGINE_CLEAR_TIMEOUT, TIMEOUT, UNIT ),
+            throw new WebApplicationException( new Exception(Messages.getString( KOMODO_ENGINE_CLEAR_TIMEOUT, TIMEOUT, UNIT )),
                                             Status.INTERNAL_SERVER_ERROR );
         }
     }
@@ -528,7 +556,7 @@ public class KomodoRestV1Application extends Application implements RepositoryOb
         return resources;
     }
 
-    private KEngine start() throws ServerErrorException {
+    private KEngine start() throws WebApplicationException {
         final KEngine kengine = KEngine.getInstance();
         final Repository repo = kengine.getDefaultRepository();
         repo.addObserver( this );
@@ -540,12 +568,11 @@ public class KomodoRestV1Application extends Application implements RepositoryOb
             kengine.start();
             started = this.latch.await( TIMEOUT, UNIT );
         } catch ( final Exception e ) {
-            String stackTrace = StringUtils.exceptionToString(e);
-            throw new ServerErrorException( Messages.getString( KOMODO_ENGINE_STARTUP_ERROR, e ) + NEW_LINE + stackTrace, Status.INTERNAL_SERVER_ERROR );
+            throw new WebApplicationException( e, Status.INTERNAL_SERVER_ERROR );
         }
 
         if ( !started ) {
-            throw new ServerErrorException( Messages.getString( KOMODO_ENGINE_STARTUP_TIMEOUT, TIMEOUT, UNIT ),
+            throw new WebApplicationException( new Exception(Messages.getString( KOMODO_ENGINE_STARTUP_TIMEOUT, TIMEOUT, UNIT )),
                                             Status.INTERNAL_SERVER_ERROR );
         }
 
@@ -555,11 +582,11 @@ public class KomodoRestV1Application extends Application implements RepositoryOb
     /**
      * Stops the Komodo Engine.
      *
-     * @throws ServerErrorException
+     * @throws WebApplicationException
      *         if there is a problem shutting down the Komodo engine
      */
     @PreDestroy
-    public void stop() throws ServerErrorException {
+    public void stop() throws WebApplicationException {
         if ( this.kengine != null ) {
             this.latch = new CountDownLatch( 1 );
 
@@ -570,15 +597,15 @@ public class KomodoRestV1Application extends Application implements RepositoryOb
                 this.kengine.shutdown();
                 shutdown = this.latch.await( TIMEOUT, UNIT );
             } catch ( final Exception e ) {
-                throw new ServerErrorException( Messages.getString( KOMODO_ENGINE_SHUTDOWN_ERROR ),
+                throw new WebApplicationException( new Exception(Messages.getString( KOMODO_ENGINE_SHUTDOWN_ERROR )),
                                                 Status.INTERNAL_SERVER_ERROR );
             } finally {
                 this.kengine = null;
             }
 
             if ( !shutdown ) {
-                throw new ServerErrorException( Messages.getString( KOMODO_ENGINE_SHUTDOWN_TIMEOUT, TIMEOUT, UNIT ),
-                                                Status.REQUEST_TIMEOUT );
+                throw new WebApplicationException( new Exception(Messages.getString( KOMODO_ENGINE_SHUTDOWN_TIMEOUT, TIMEOUT, UNIT )),
+                                                Status.INTERNAL_SERVER_ERROR );
             }
         }
     }

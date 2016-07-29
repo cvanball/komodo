@@ -57,7 +57,6 @@ public final class ServerDeployVdbCommand extends ServerShellCommand {
     static final String NAME = "server-deploy-vdb"; //$NON-NLS-1$
 
     private static final List< String > VALID_OVERWRITE_ARGS = Arrays.asList( new String[] { "-o", "--overwrite" } ); //$NON-NLS-1$ //$NON-NLS-2$;
-    private static final String VDB_DEPLOYMENT_SUFFIX = "-vdb.xml"; //$NON-NLS-1$
 
     /**
      * @param status
@@ -138,7 +137,12 @@ public final class ServerDeployVdbCommand extends ServerShellCommand {
                 String vdbToDeployName = vdbToDeploy.getName(getTransaction());
                 String vdbDeploymentName = vdbToDeployName + VDB_DEPLOYMENT_SUFFIX;
                 InputStream stream = new ByteArrayInputStream(vdbXml);
-                teiidInstance.deployDynamicVdb(vdbDeploymentName, stream);
+                try {
+                    teiidInstance.deployDynamicVdb(vdbDeploymentName, stream);
+                } catch (Exception ex) {
+                    result = new CommandResultImpl( false, I18n.bind( ServerCommandsI18n.vdbDeploymentError, ex.getLocalizedMessage() ), null );
+                    return result;
+                }
             } catch (Exception ex) {
                 result = new CommandResultImpl( false, I18n.bind( ServerCommandsI18n.connectionErrorWillDisconnect ), ex );
                 WkspStatusServerManager.getInstance(getWorkspaceStatus()).disconnectDefaultServer();

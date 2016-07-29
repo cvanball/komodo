@@ -35,6 +35,58 @@ import org.komodo.spi.repository.KomodoType;
  */
 public final class RelationalMessages {
 
+    public enum Info {
+        /**
+         * Title for the driver deployment status
+         */
+        DRIVER_DEPLOYMENT_STATUS_TITLE,
+
+        /**
+         * Driver successfully uploaded
+         */
+        DRIVER_SUCCESSFULLY_UPLOADED,
+
+        /**
+         * Driver successfully deployed
+         */
+        DRIVER_SUCCESSFULLY_DEPLOYED,
+
+        /**
+         * Driver undeployment request sent but not yet undeployed
+         */
+        DRIVER_UNDEPLOYMENT_REQUEST_SENT,
+
+        /**
+         * Driver successfully deployed
+         */
+        DRIVER_SUCCESSFULLY_UNDEPLOYED,
+
+        /**
+         * Data service status title
+         */
+        DATA_SERVICE_DEPLOYMENT_STATUS_TITLE,
+
+        /**
+         * Data service successfully deployed
+         */
+        DATA_SERVICE_SUCCESSFULLY_DEPLOYED,
+
+        /**
+         * Data service deployed with errors
+         */
+        DATA_SERVICE_DEPLOYED_WITH_ERRORS;
+
+        /**
+         * {@inheritDoc}
+         *
+         * @see java.lang.Enum#toString()
+         */
+        @Override
+        public String toString() {
+            return getEnumName( this ) + DOT + name();
+        }
+    }
+
     /**
      * Messages relating to errors.
      */
@@ -369,6 +421,61 @@ public final class RelationalMessages {
          * An error indicating an error occurred whilst fetching the teiid translators
          */
         TEIID_SERVICE_GET_TRANSLATORS_ERROR,
+
+        /**
+         * An error indicating a teiid file attributes object has no parameters
+         */
+        TEIID_SERVICE_FILE_ATTRIB_NO_PARAMETERS,
+
+        /**
+         * An error indicating a teiid file attributes object has no name
+         */
+        TEIID_SERVICE_FILE_ATTRIB_NO_NAME,
+
+        /**
+         * An error indicating a teiid file attributes object has no file
+         */
+        TEIID_SERVICE_FILE_ATTRIB_NO_CONTENT,
+
+        /**
+         * An error indicating a teiid driver failure
+         */
+        TEIID_SERVICE_DRIVER_ERROR,
+
+        /**
+         * An error indicating a name is missing while deploying a data service
+         */
+        TEIID_SERVICE_DATA_SERVICE_MISSING_PATH,
+
+        /**
+         * No data service could be found while trying to deploy
+         */
+        TEIID_SERVICE_NO_DATA_SERVICE_FOUND,
+
+        /**
+         * No query specified for the query operation
+         */
+        TEIID_SERVICE_QUERY_MISSING_QUERY,
+
+        /**
+         * No target specified for the query operation
+         */
+        TEIID_SERVICE_QUERY_MISSING_TARGET,
+
+        /**
+         * The query target does not appear to have been deployed
+         */
+        TEIID_SERVICE_QUERY_TARGET_NOT_DEPLOYED,
+
+        /**
+         * An error indicating a query failure
+         */
+        TEIID_SERVICE_QUERY_ERROR,
+
+        /**
+         * Error indicating a ping type is missing
+         */
+        TEIID_SERVICE_PING_MISSING_TYPE,
 
         /**
          * The importexport service lacks at least one storage attribute

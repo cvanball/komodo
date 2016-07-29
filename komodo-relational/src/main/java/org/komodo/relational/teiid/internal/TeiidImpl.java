@@ -33,6 +33,7 @@ import org.komodo.core.KomodoLexicon;
 import org.komodo.core.KomodoLexicon.TeiidArchetype;
 import org.komodo.osgi.PluginService;
 import org.komodo.relational.Messages;
+import org.komodo.relational.RelationalModelFactory;
 import org.komodo.relational.datasource.Datasource;
 import org.komodo.relational.datasource.internal.DatasourceImpl;
 import org.komodo.relational.internal.RelationalChildRestrictedObject;
@@ -44,6 +45,7 @@ import org.komodo.relational.vdb.internal.VdbImpl;
 import org.komodo.relational.workspace.ServerManager;
 import org.komodo.repository.SynchronousCallback;
 import org.komodo.spi.KException;
+import org.komodo.spi.query.QueryService;
 import org.komodo.spi.query.TeiidService;
 import org.komodo.spi.repository.KomodoObject;
 import org.komodo.spi.repository.KomodoType;
@@ -120,7 +122,18 @@ public class TeiidImpl extends RelationalChildRestrictedObject implements Teiid,
 
         @Override
         public int getPort() {
-            return TeiidImpl.this.getPort();
+            UnitOfWork uow = null;
+            try {
+               uow = getOrCreateTransaction();
+               int port = getJdbcPort(uow);
+               commit(uow);
+               return port;
+            } catch (KException ex) {
+                KEngine.getInstance().getErrorHandler().error(ex);
+                if (uow != null)
+                    uow.rollback();
+                return -1;
+            }
         }
 
         @Override
@@ -449,6 +462,28 @@ public class TeiidImpl extends RelationalChildRestrictedObject implements Teiid,
         }
 
         return getTeiidInstance(uow, version);
+    }
+
+    @Override
+    public QueryService getQueryService(UnitOfWork uow) throws KException {
+        ArgCheck.isNotNull( uow, "transaction" ); //$NON-NLS-1$
+        ArgCheck.isTrue( ( uow.getState() == State.NOT_STARTED ), "transaction state is not NOT_STARTED" ); //$NON-NLS-1$
+
+        TeiidVersion version = null;
+        try {
+            version = getVersion(uow);
+            TeiidService teiidService = PluginService.getInstance().getTeiidService(version);
+
+            String host = getHost(uow);
+            int port = getJdbcPort(uow);
+            String user = getJdbcUsername(uow);
+            String passwd = getJdbcPassword(uow);
+            boolean isSecure = isJdbcSecure(uow);
+
+            return teiidService.getQueryService(host, port, user, passwd, isSecure);
+        } catch (Exception ex) {
+            throw RelationalModelFactory.handleError(ex);
+        }
     }
 
     /**

@@ -36,7 +36,7 @@ import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
 import javax.ws.rs.QueryParam;
-import javax.ws.rs.ServerErrorException;
+import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.MediaType;
@@ -55,11 +55,11 @@ import org.komodo.rest.KomodoRestException;
 import org.komodo.rest.KomodoRestV1Application.V1Constants;
 import org.komodo.rest.KomodoService;
 import org.komodo.rest.RestBasicEntity;
-import org.komodo.rest.relational.KomodoSavedSearcher;
-import org.komodo.rest.relational.KomodoSearcherAttributes;
-import org.komodo.rest.relational.KomodoStatusObject;
 import org.komodo.rest.relational.RelationalMessages;
 import org.komodo.rest.relational.json.KomodoJsonMarshaller;
+import org.komodo.rest.relational.request.KomodoSearcherAttributes;
+import org.komodo.rest.relational.response.KomodoSavedSearcher;
+import org.komodo.rest.relational.response.KomodoStatusObject;
 import org.komodo.spi.KException;
 import org.komodo.spi.constants.StringConstants;
 import org.komodo.spi.query.LogicalOperator;
@@ -86,10 +86,10 @@ public final class KomodoSearchService extends KomodoService {
     /**
      * @param engine
      *        the Komodo Engine (cannot be <code>null</code> and must be started)
-     * @throws ServerErrorException
+     * @throws WebApplicationException
      *         if there is a problem obtaining the {@link WorkspaceManager workspace manager}
      */
-    public KomodoSearchService( final KEngine engine ) throws ServerErrorException {
+    public KomodoSearchService( final KEngine engine ) throws WebApplicationException {
         super( engine );
     }
 
@@ -219,7 +219,6 @@ public final class KomodoSearchService extends KomodoService {
      */
     @GET
     @Produces( MediaType.APPLICATION_JSON )
-    @Consumes ( { MediaType.APPLICATION_JSON } )
     @ApiOperation(value = "Search the workspace using criteria",
                              response = RestBasicEntity[].class)
     @ApiResponses(value = {
@@ -414,7 +413,6 @@ public final class KomodoSearchService extends KomodoService {
     @GET
     @Path(V1Constants.SAVED_SEARCHES_SEGMENT)
     @Produces( MediaType.APPLICATION_JSON )
-    @Consumes ( { MediaType.APPLICATION_JSON } )
     @ApiOperation(value = "Fetch saved searches from the workspace",
                              response = RestBasicEntity[].class)
     @ApiResponses(value = {

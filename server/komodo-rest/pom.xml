@@ -15,7 +15,6 @@
 
 	<properties>
 		<version.gson>2.2.4</version.gson>
-		<version.resteasy>3.0.11.Final</version.resteasy>
 		<version.guava>16.0.1</version.guava>
 		<version.swagger>1.5.0</version.swagger>
 		<version.jaxrs>2.13</version.jaxrs>
@@ -51,13 +50,6 @@
 				<groupId>com.google.guava</groupId>
 				<artifactId>guava</artifactId>
 				<version>${version.guava}</version>
-			</dependency>
-			<dependency>
-				<groupId>org.jboss.resteasy</groupId>
-				<artifactId>resteasy-bom</artifactId>
-				<version>${version.resteasy}</version>
-				<type>pom</type>
-				<scope>import</scope>
 			</dependency>
 			<dependency>
 				<groupId>io.swagger</groupId>
@@ -155,11 +147,7 @@
 		</dependency>
 		<dependency>
 			<groupId>org.jboss.resteasy</groupId>
-			<artifactId>resteasy-client</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>org.jboss.resteasy</groupId>
-			<artifactId>resteasy-json-p-provider</artifactId>
+			<artifactId>jaxrs-api</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.jboss.resteasy</groupId>
@@ -183,15 +171,9 @@
 		</dependency>
 
 		<dependency>
-			<groupId>io.undertow</groupId>
-			<artifactId>undertow-servlet</artifactId>
-			<scope>test</scope>
-		</dependency>
-
-		<dependency>
-			<groupId>org.jboss.resteasy</groupId>
-			<artifactId>resteasy-undertow</artifactId>
-			<scope>test</scope>
+  			<groupId>org.jboss.resteasy</groupId>
+  			<artifactId>resteasy-test-tjws</artifactId>
+  			<scope>test</scope>
 		</dependency>
 
 		<dependency>
@@ -246,17 +228,39 @@
 					</execution>
 					<!-- Add integration-test resource directory to our build -->
 					<execution>
-						<id>add-integration-test-resources</id>
+						<id>add-integration-test-resources-filtered</id>
 						<phase>generate-test-resources</phase>
 						<goals>
 							<goal>add-test-resource</goal>
 						</goals>
 						<configuration>
-							<!-- Configures the resource directory of our integration tests -->
+							<!-- Configures the filtered resources of our integration tests -->
 							<resources>
 								<resource>
 									<filtering>true</filtering>
 									<directory>src/integration-test/resources</directory>
+									<excludes>
+										<exclude>*.jar</exclude>
+									</excludes>
+								</resource>
+							</resources>
+						</configuration>
+					</execution>
+					<execution>
+						<id>add-integration-test-resources-unfiltered</id>
+						<phase>generate-test-resources</phase>
+						<goals>
+							<goal>add-test-resource</goal>
+						</goals>
+						<configuration>
+							<!-- Configures the unfiltered resources of our integration tests -->
+							<resources>
+								<resource>
+									<filtering>false</filtering>
+									<directory>src/integration-test/resources</directory>
+									<includes>
+										<include>*.jar</include>
+									</includes>
 								</resource>
 							</resources>
 						</configuration>
@@ -358,28 +362,26 @@
 				</executions>
 			</plugin>
 
-			<!-- Downloads resteasy jaxrs from resteasy for use in integration tests -->
 			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-antrun-plugin</artifactId>
+				<artifactId>maven-resources-plugin</artifactId>
 				<executions>
 					<execution>
-						<id>download-resteasy</id>
-						<phase>process-sources</phase>
+						<id>copy-resources-credentials</id>
+						<phase>process-test-classes</phase>
 						<goals>
-							<goal>run</goal>
+							<goal>copy-resources</goal>
 						</goals>
 						<configuration>
-							<!-- Not required if skipping integration tests -->
-							<skip>${integration.skipTests}</skip>
-							<target>
-								<property name="version.resteasy" value="${version.resteasy}" />
-								<property name="destination.resteasy" value="${project.build.directory}/resteasy" />
-								<property name="destination.jboss.modules"
-									value="${project.basedir}/lib/jbossas/${version.jbossas.test}/modules/system/layers/base" />
-								<ant antfile="${project.basedir}/install-resteasy.xml"
-									target="install" />
-							</target>
+							<outputDirectory>${project.basedir}/lib/jbossas/${version.jbossas.test}/standalone/configuration</outputDirectory>
+							<resources>
+								<resource>
+									<directory>src/test/resources/credentials</directory>
+									<includes>
+										<include>*.properties</include>
+									</includes>
+									<filtering>true</filtering>
+								</resource>
+							</resources>
 						</configuration>
 					</execution>
 				</executions>
@@ -472,17 +474,6 @@
 					<artifactId>resteasy-jaxrs</artifactId>
 					<scope>provided</scope>
 				</dependency>
-				<dependency>
-					<groupId>org.jboss.resteasy</groupId>
-					<artifactId>resteasy-client</artifactId>
-					<scope>provided</scope>
-				</dependency>
-				<dependency>
-					<groupId>org.jboss.resteasy</groupId>
-					<artifactId>resteasy-json-p-provider</artifactId>
-					<scope>provided</scope>
-				</dependency>
-
 			</dependencies>
 		</profile>
 
